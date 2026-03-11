@@ -115,18 +115,26 @@ class MemoryManager:
             return False
 
     async def create_episodic_memory(
-        self, message: str, llm_connection: LLMConnection
+        self, message: str, llm_connection: LLMConnection, max_retries: int = 2
     ) -> Optional[str]:
         """
         Create an episodic memory from a conversation.
 
+        Uses an eval gate to validate the LLM output against the expected
+        schema. Hard validation failures trigger automatic retries up to
+        ``max_retries`` times. Soft failures are logged as warnings but
+        do not block the pipeline.
+
         Args:
             message: Conversation message to convert to episodic memory.
             llm_connection: LLM connection for generating the memory.
+            max_retries: Maximum number of retry attempts on hard eval failure.
 
         Returns:
             Generated episodic memory content, or None if generation fails.
         """
+        from omnimemory.core.evals.episodic_eval import validate_episodic_output
+
         try:
             llm_messages = [
                 {
@@ -136,10 +144,37 @@ class MemoryManager:
                 {"role": "user", "content": message},
             ]
 
-            response = await llm_connection.llm_call(messages=llm_messages)
-            if response and response.choices:
+            total_attempts = 1 + max_retries
+            for attempt in range(1, total_attempts + 1):
+                response = await llm_connection.llm_call(messages=llm_messages)
+                if not (response and response.choices):
+                    logger.warning(
+                        f"Episodic memory LLM returned no content (attempt {attempt}/{total_attempts})"
+                    )
+                    return None
+
                 content = response.choices[0].message.content
-                return content  # type: ignore[no-any-return]
+                eval_result = validate_episodic_output(content)
+
+                if eval_result.passed:
+                    if eval_result.soft_failures:
+                        logger.warning(
+                            f"Episodic eval soft warnings: {eval_result.soft_failures}"
+                        )
+                    return content  # type: ignore[no-any-return]
+
+                # Hard failure — retry or give up.
+                if attempt < total_attempts:
+                    logger.warning(
+                        f"Episodic eval hard failure (attempt {attempt}/{total_attempts}), "
+                        f"retrying: {eval_result.hard_failures}"
+                    )
+                else:
+                    logger.error(
+                        f"Episodic eval failed after {total_attempts} attempts: "
+                        f"{eval_result.hard_failures}"
+                    )
+
             return None
         except Exception as e:
             logger.error(f"Error creating episodic memory: {e}")

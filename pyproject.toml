@@ -72,6 +72,19 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "asyncio: marks tests that use asyncio",
     "OpenAIIntegration: marks tests that require an OpenAI API key",
+    "integration: marks tests as integration tests (require real external dependencies)",
+    "llm: marks tests that require LLM API access (embeddings, agents)",
+    "vectordb: marks tests that require vector database access (Phase 2)",
+    "docker: marks tests that require Docker (Phase 2)",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "-m", "not integration",  # Skip integration tests by default
 ]
 
 [tool.uv.sources]
@@ -87,6 +100,7 @@ dev = [
     "hatch>=1.14.1",
     "twine>=6.1.0",
     "mypy>=1.11.0",
+    "hypothesis>=6.100.0",
 ]
 
 [tool.coverage.run]

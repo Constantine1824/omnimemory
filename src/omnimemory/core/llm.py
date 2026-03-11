@@ -422,27 +422,13 @@ class LLMConnection:
             logger.debug(f"Provider {provider} uses different authentication method")
         else:
             logger.warning(f"Unknown embedding provider: {provider}, API key not set")
-
-    @retry_with_backoff(max_retries=3, base_delay=1, max_delay=30)
-    async def embedding_call(
-        self,
-        input_text: Union[str, Sequence[str]],
-        input_type: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        
+    def _get_embedding_params(self, 
+        input_text: Union[str, Sequence[str]], 
+        input_type: Optional[str] = None, 
+        metadata: Optional[Dict[str, Any]] = None, 
         user: Optional[str] = None,
-    ) -> Optional[Any]:
-        """
-        Call the embedding service using LiteLLM.
-
-        Args:
-            input_text: Text or batch of texts to embed.
-            input_type: Provider-specific input type hint.
-            metadata: Optional metadata forwarded to providers that support it.
-            user: Optional user identifier for auditing.
-
-        Returns:
-            Provider embedding response payload or None on failure.
-        """
+    ) -> Optional[Dict[str, Any]]:
         try:
             if not self.embedding_config:
                 logger.error("Embedding configuration not loaded")
@@ -482,17 +468,85 @@ class LLMConnection:
 
             if provider == "cohere" and not input_type:
                 params["input_type"] = "search_document"
-
-            # if provider == "openai":
+            
+             # if provider == "openai":
             #     model_name = self.embedding_config.get("model", "").lower()
             #     if (
             #         "text-embedding-3" in model_name
             #         or "text-embedding-small-3" in model_name
             #     ):
             #         params.pop("dimensions", None)
+            
+            return params
+        except Exception as e:
+            logger.error(f"Error getting embedding parameters: {e}")
+            return None
+    
+    def _get_llm_params(self, 
+        messages: Sequence[Any], 
+        tools: Optional[Sequence[Dict[str, Any]]]
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            if not self.llm_config:
+                logger.debug("LLM configuration not loaded, skipping LLM call")
+                return None
+
+            messages_dicts = [self.to_dict(m) for m in messages]
+
+            params = {
+                "model": self.llm_config["model"],
+                "messages": messages_dicts,
+            }
+
+            if self.llm_config.get("temperature") is not None:
+                params["temperature"] = self.llm_config["temperature"]
+
+            if self.llm_config.get("max_tokens") is not None:
+                params["max_tokens"] = self.llm_config["max_tokens"]
+
+            if self.llm_config.get("top_p") is not None:
+                params["top_p"] = self.llm_config["top_p"]
+
+            if tools:
+                params["tools"] = tools
+                params["tool_choice"] = "auto"
+
+            if self.llm_config["provider"].lower() == "openrouter":
+                if not tools:
+                    params["stop"] = ["\n\nObservation:"]
+
+            return params
+        
+        except Exception as e:
+            logger.error(f"Error getting LLM parameters: {e}")
+            return None
+
+    @retry_with_backoff(max_retries=3, base_delay=1, max_delay=30)
+    async def embedding_call(
+        self,
+        input_text: Union[str, Sequence[str]],
+        input_type: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        user: Optional[str] = None,
+    ) -> Optional[Any]:
+        """
+        Call the embedding service using LiteLLM.
+
+        Args:
+            input_text: Text or batch of texts to embed.
+            input_type: Provider-specific input type hint.
+            metadata: Optional metadata forwarded to providers that support it.
+            user: Optional user identifier for auditing.
+
+        Returns:
+            Provider embedding response payload or None on failure.
+        """
+        try:
+            params = self._get_embedding_params(input_text, input_type, metadata, user)
+            if not params:
+                return None
 
             litellm.drop_params = True
-
             response = await litellm.aembedding(**params)
             return response
 
@@ -522,55 +576,11 @@ class LLMConnection:
         Args mirror embedding_call.
         """
         try:
-            if not self.embedding_config:
-                logger.error("Embedding configuration not loaded")
+            params = self._get_embedding_params(input_text, input_type, metadata, user)
+            if not params:
                 return None
-
-            if not self.embedding_config.get(
-                "provider"
-            ) or not self.embedding_config.get("model"):
-                logger.error("Embedding provider or model not configured")
-                return None
-
-            params = {
-                "model": self.embedding_config["model"],
-                "input": input_text,
-            }
-
-            if self.embedding_config.get("dimensions") is not None:
-                params["dimensions"] = self.embedding_config["dimensions"]
-
-            params["encoding_format"] = self.embedding_config.get(
-                "encoding_format", "float"
-            )
-
-            if self.embedding_config.get("timeout") is not None:
-                params["timeout"] = self.embedding_config["timeout"]
-
-            if input_type:
-                params["input_type"] = input_type
-
-            if metadata:
-                params["metadata"] = metadata
-
-            if user:
-                params["user"] = user
-
-            provider = self.embedding_config["provider"].lower()
-
-            if provider == "cohere" and not input_type:
-                params["input_type"] = "search_document"
-
-            # if provider == "openai":
-            #     model_name = self.embedding_config.get("model", "").lower()
-            #     if (
-            #         "text-embedding-3" in model_name
-            #         or "text-embedding-small-3" in model_name
-            #     ):
-            #         params.pop("dimensions", None)
-
+        
             litellm.drop_params = True
-
             response = litellm.embedding(**params)
             return response
 
@@ -631,33 +641,9 @@ class LLMConnection:
             LiteLLM completion response or None when unavailable.
         """
         try:
-            if not self.llm_config:
-                logger.debug("LLM configuration not loaded, skipping LLM call")
+            params = self._get_llm_params(messages, tools)
+            if not params:
                 return None
-
-            messages_dicts = [self.to_dict(m) for m in messages]
-
-            params = {
-                "model": self.llm_config["model"],
-                "messages": messages_dicts,
-            }
-
-            if self.llm_config.get("temperature") is not None:
-                params["temperature"] = self.llm_config["temperature"]
-
-            if self.llm_config.get("max_tokens") is not None:
-                params["max_tokens"] = self.llm_config["max_tokens"]
-
-            if self.llm_config.get("top_p") is not None:
-                params["top_p"] = self.llm_config["top_p"]
-
-            if tools:
-                params["tools"] = tools
-                params["tool_choice"] = "auto"
-
-            if self.llm_config["provider"].lower() == "openrouter":
-                if not tools:
-                    params["stop"] = ["\n\nObservation:"]
 
             litellm.drop_params = True
 
@@ -677,33 +663,9 @@ class LLMConnection:
     ) -> Optional[Any]:
         """Synchronous variant of llm_call."""
         try:
-            if not self.llm_config:
-                logger.debug("LLM configuration not loaded, skipping LLM call")
+            params = self._get_llm_params(messages, tools)
+            if not params:
                 return None
-
-            messages_dicts = [self.to_dict(m) for m in messages]
-
-            params = {
-                "model": self.llm_config["model"],
-                "messages": messages_dicts,
-            }
-
-            if self.llm_config.get("temperature") is not None:
-                params["temperature"] = self.llm_config["temperature"]
-
-            if self.llm_config.get("max_tokens") is not None:
-                params["max_tokens"] = self.llm_config["max_tokens"]
-
-            if self.llm_config.get("top_p") is not None:
-                params["top_p"] = self.llm_config["top_p"]
-
-            if tools:
-                params["tools"] = tools
-                params["tool_choice"] = "auto"
-
-            if self.llm_config["provider"].lower() == "openrouter":
-                if not tools:
-                    params["stop"] = ["\n\nObservation:"]
 
             litellm.drop_params = True
 

@@ -2,8 +2,14 @@
 Pytest configuration and shared fixtures for OmniMemory tests.
 """
 
-import pytest
 import asyncio
+import os
+import sys
+
+# Ensure src is in pythonpath
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
+
+import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 from omnimemory.core.llm import LLMConnection
 

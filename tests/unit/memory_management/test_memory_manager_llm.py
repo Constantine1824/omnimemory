@@ -75,13 +75,18 @@ def _stub_metrics(monkeypatch):
 @pytest.mark.asyncio
 async def test_create_episodic_memory_returns_content(monkeypatch, mock_llm_connection):
     manager = _make_manager(monkeypatch, mock_llm_connection)
+    valid_json = (
+        '{"context": {"available_data": "data", "user_intent": "intent"}, '
+        '"behavioral_profile": {"communication": "comm", "learning": "learn"}, '
+        '"future_guidance": {"recommended_approaches": ["approach"]}}'
+    )
     mock_llm_connection.llm_call = AsyncMock(
-        return_value=Mock(choices=[Mock(message=Mock(content="episodic-note"))])
+        return_value=Mock(choices=[Mock(message=Mock(content=valid_json))])
     )
 
     result = await manager.create_episodic_memory("hello", mock_llm_connection)
 
-    assert result == "episodic-note"
+    assert result == valid_json
     mock_llm_connection.llm_call.assert_awaited_once()
 
 
