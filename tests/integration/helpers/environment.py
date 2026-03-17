@@ -13,7 +13,6 @@ from typing import Dict, Any, Tuple, List, Optional
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class EnvironmentInfo:
     """Information about the detected test environment."""
@@ -113,13 +112,11 @@ class EnvironmentDetector:
         Returns:
             True if Docker should be used, False otherwise.
         """
-        # Check for explicit override
         use_docker_env = os.getenv("USE_DOCKER", "").lower()
         if use_docker_env in ("false", "0", "no"):
             logger.debug("USE_DOCKER environment variable set to false")
             return False
-        
-        # Check Docker availability
+
         return self.is_docker_available() and self.is_docker_daemon_running()
     
     def validate_llm_config(self) -> Tuple[bool, str]:
@@ -131,7 +128,6 @@ class EnvironmentDetector:
         Returns:
             Tuple of (is_valid, error_message). If valid, error_message is empty.
         """
-        # Check for OpenAI API key (primary provider)
         openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
         
         if openai_key:
@@ -159,7 +155,6 @@ class EnvironmentDetector:
         
         warnings = []
         
-        # Docker warnings
         if not docker_installed:
             warnings.append("Docker is not installed")
         elif not docker_daemon:
@@ -167,11 +162,10 @@ class EnvironmentDetector:
         elif not use_docker:
             warnings.append("Docker usage disabled via USE_DOCKER environment variable")
         
-        # LLM warnings
         if not llm_valid:
             warnings.append(llm_error)
         
-        # Build summary text
+
         summary_lines = []
         summary_lines.append("=" * 60)
         summary_lines.append("Integration Test Environment Detection")
@@ -179,11 +173,11 @@ class EnvironmentDetector:
         
         # Docker status
         if docker_installed and docker_daemon:
-            summary_lines.append("✓ Docker: Available and running")
+            summary_lines.append("Docker: Available and running")
         elif docker_installed:
-            summary_lines.append("✗ Docker: Installed but daemon not running")
+            summary_lines.append("Docker: Installed but daemon not running")
         else:
-            summary_lines.append("✗ Docker: Not installed")
+            summary_lines.append("Docker: Not installed")
         
         if not use_docker and docker_installed:
             summary_lines.append("  Note: Docker usage disabled via USE_DOCKER=false")
@@ -192,9 +186,9 @@ class EnvironmentDetector:
         if llm_valid:
             provider = os.getenv("LLM_PROVIDER", "openai")
             model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-            summary_lines.append(f"✓ LLM: Configured ({provider}/{model})")
+            summary_lines.append(f"LLM: Configured ({provider}/{model})")
         else:
-            summary_lines.append("✗ LLM: Not configured (tests will be skipped)")
+            summary_lines.append("LLM: Not configured (tests will be skipped)")
         
         # Warnings
         if warnings:

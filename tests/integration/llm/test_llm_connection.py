@@ -10,9 +10,6 @@ These tests validate LLMConnection class with real API calls to verify:
 
 All tests require LLM API keys to be configured via environment variables.
 Tests will be skipped if API keys are not available.
-
-Usage:
-    pytest tests/integration/llm/test_llm_connection.py -m llm -v
 """
 
 import os
@@ -36,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Property-based testing configuration
 # Keep max_examples low for integration tests to avoid excessive API costs.
-settings.register_profile("ci", max_examples=5, deadline=30000)
+settings.register_profile("ci", max_examples=3, deadline=30000)
 settings.register_profile("dev", max_examples=3, deadline=10000)
 settings.load_profile("ci" if "CI" in os.environ else "dev")
 
@@ -165,7 +162,6 @@ class TestEmbeddingGeneration:
         )
 
 
-# Property-based tests for embeddings
 @pytest.mark.integration
 @pytest.mark.llm
 class TestEmbeddingPropertyTests:

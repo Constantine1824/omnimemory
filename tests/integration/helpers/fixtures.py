@@ -96,11 +96,6 @@ def extract_json_from_response(content: str) -> Dict[str, Any]:
     """
     Extract JSON from various response formats.
     
-    Handles:
-    - Plain JSON
-    - Markdown code blocks (```json ... ```)
-    - JSON wrapped in text
-    
     Args:
         content: The response content to parse.
     
@@ -110,7 +105,6 @@ def extract_json_from_response(content: str) -> Dict[str, Any]:
     Raises:
         ValueError: If JSON cannot be extracted or parsed.
     """
-    # Try to parse as plain JSON first
     try:
         return json.loads(content)
     except json.JSONDecodeError:

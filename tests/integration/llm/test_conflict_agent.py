@@ -10,9 +10,6 @@ These tests validate ConflictResolutionAgent with real LLM API calls to verify:
 
 All tests require LLM API keys to be configured via environment variables.
 Tests will be skipped if API keys are not available.
-
-Usage:
-    pytest tests/integration/llm/test_conflict_agent.py -m llm -v
 """
 
 import os

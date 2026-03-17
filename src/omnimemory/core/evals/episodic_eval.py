@@ -15,8 +15,6 @@ from omnimemory.core.utils import clean_and_parse_json
 
 logger = logging.getLogger(__name__)
 
-# ── Schema constants ────────────────────────────────────────────────────────
-
 REQUIRED_TOP_LEVEL_KEYS = {"context", "behavioral_profile", "future_guidance"}
 
 CONTEXT_REQUIRED_KEYS = {"available_data", "user_intent"}
@@ -25,18 +23,14 @@ BEHAVIORAL_PROFILE_REQUIRED_KEYS = {"communication", "learning"}
 
 FUTURE_GUIDANCE_REQUIRED_KEYS = {"recommended_approaches"}
 
-# Keys that are expected but whose absence is a soft failure only.
 OPTIONAL_TOP_LEVEL_KEYS = {"what_worked", "what_failed", "interaction_insights"}
 
-# Sub-field type expectations for hard checks.
 _EXPECTED_DICT_FIELDS = {"context", "behavioral_profile", "future_guidance"}
 _EXPECTED_DICT_OR_ABSENT_FIELDS = {"what_worked", "what_failed", "interaction_insights"}
 
 # Soft-check length limits (word count) — mirrors the system prompt hints.
 _MAX_SENTENCE_WORDS = 40  # "1 sentence" ≈ up to 40 words
 
-
-# ── Result dataclass ────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -54,9 +48,6 @@ class EvalResult:
     soft_failures: List[str] = field(default_factory=list)
 
 
-# ── Public API ──────────────────────────────────────────────────────────────
-
-
 def validate_episodic_output(raw_output: str) -> EvalResult:
     """Validate episodic agent LLM output against the expected schema.
 
@@ -69,12 +60,12 @@ def validate_episodic_output(raw_output: str) -> EvalResult:
     hard: List[str] = []
     soft: List[str] = []
 
-    # ── Hard check 1: non-empty ──────────────────────────────────────────
+    # Hard check 1: non-empty
     if not raw_output or not raw_output.strip():
         hard.append("Output is empty or whitespace-only")
         return EvalResult(passed=False, hard_failures=hard, soft_failures=soft)
 
-    # ── Hard check 2: parseable JSON ─────────────────────────────────────
+    # Hard check 2: parseable JSON
     try:
         data = clean_and_parse_json(raw_output)
     except (ValueError, TypeError) as exc:
@@ -85,27 +76,29 @@ def validate_episodic_output(raw_output: str) -> EvalResult:
         hard.append(f"Top-level value is {type(data).__name__}, expected dict")
         return EvalResult(passed=False, hard_failures=hard, soft_failures=soft)
 
-    # ── Hard check 3: required top-level keys ────────────────────────────
+    # Hard check 3: required top-level keys
     missing_keys = REQUIRED_TOP_LEVEL_KEYS - set(data.keys())
     if missing_keys:
         hard.append(f"Missing required top-level keys: {sorted(missing_keys)}")
+        return EvalResult(passed=False, hard_failures=hard, soft_failures=soft)
 
-    # ── Hard check 4: required fields are dicts ──────────────────────────
+    #  Hard check 4: required fields are dicts
     for key in _EXPECTED_DICT_FIELDS:
         value = data.get(key)
         if value is not None and not isinstance(value, dict):
             hard.append(
                 f"'{key}' should be a dict, got {type(value).__name__}"
             )
+        return EvalResult(passed=False, hard_failures=hard, soft_failures=soft)
 
-    # ── Hard check 5: required sub-keys ──────────────────────────────────
+    # Hard check 5: required sub-keys
     _check_sub_keys(data, "context", CONTEXT_REQUIRED_KEYS, hard)
     _check_sub_keys(
         data, "behavioral_profile", BEHAVIORAL_PROFILE_REQUIRED_KEYS, hard
     )
     _check_sub_keys(data, "future_guidance", FUTURE_GUIDANCE_REQUIRED_KEYS, hard)
 
-    # ── Hard check 6: recommended_approaches must be a list ──────────────
+    # Hard check 6: recommended_approaches must be a list
     guidance = data.get("future_guidance")
     if isinstance(guidance, dict):
         approaches = guidance.get("recommended_approaches")
@@ -115,7 +108,7 @@ def validate_episodic_output(raw_output: str) -> EvalResult:
                 f"got {type(approaches).__name__}"
             )
 
-    # ── Hard check 7: what_worked.strategies must be a list (if present) ─
+    # Hard check 7: what_worked.strategies must be a list (if present) ─
     what_worked = data.get("what_worked")
     if isinstance(what_worked, dict):
         strategies = what_worked.get("strategies")
@@ -125,16 +118,13 @@ def validate_episodic_output(raw_output: str) -> EvalResult:
                 f"got {type(strategies).__name__}"
             )
 
-    # ── Soft checks ──────────────────────────────────────────────────────
+    # Soft checks
     _soft_check_optional_keys(data, soft)
     _soft_check_na_discipline(data, soft)
     _soft_check_strategy_limits(data, soft)
 
     passed = len(hard) == 0
     return EvalResult(passed=passed, hard_failures=hard, soft_failures=soft)
-
-
-# ── Internal helpers ────────────────────────────────────────────────────────
 
 
 def _check_sub_keys(
